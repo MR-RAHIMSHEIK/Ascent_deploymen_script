@@ -1,0 +1,90 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.4.6
+    container_name: mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend-v1:
+    image: mrrahimsheik/eschool-app:1.0.0
+    container_name: eschool-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    networks:
+      - backend
+
+  backend-v2:
+    image: mrrahimsheik/eschool-report:1.0.0
+    container_name: eschool-report
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+
+  angular-frontend:
+    image: mrrahimsheik/eschool-ui:1.0.0
+    container_name: eschool-ui
+    restart: unless-stopped
+    ports:
+      - "4200:80"   # host 4200 → container 80
+    networks:
+      - backend
+    depends_on:
+      - backend-v1
+      - backend-v2
+
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: eschool-backup
+    restart: unless-stopped
+    volumes:
+      - ./backups:/backups
+      - ./scripts:/scripts
+    env_file:
+      - .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

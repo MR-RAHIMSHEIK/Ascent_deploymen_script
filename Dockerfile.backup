@@ -1,0 +1,18 @@
+# Use lightweight Alpine
+FROM alpine:latest
+
+# Install bash, MySQL client, cron
+RUN apk add --no-cache bash mysql-client curl
+
+# Copy backup script
+COPY scripts/backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
+
+# Create backups directory inside container
+RUN mkdir -p /backups
+
+# Cron job: weekly backup every Sunday at 2 AM
+RUN echo "0 2 * * 0 /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1" > /etc/crontabs/root
+
+# Start cron in foreground
+CMD ["crond","-f","-l","2"]
